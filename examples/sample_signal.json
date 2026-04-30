@@ -1,0 +1,12 @@
+{
+  "symbol": "AAPL",
+  "action": "BUY",
+  "quantity": 100,
+  "limit_price": 150.00,
+  "order_type": "LIMIT",
+  "strategy_name": "manual_signal",
+  "metadata": {
+    "reason": "Example long signal",
+    "risk_rating": "low"
+  }
+}

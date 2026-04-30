@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "quagent"
+version = "0.1.0"
+description = "Quantitative trading system for IBKR"
+authors = [{name = "Quant Team"}]
+requires-python = ">=3.11"
+dependencies = [
+    "ib-insync>=0.9.86",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=0.21.0",
+    "sqlalchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+disallow_untyped_defs = true
+
+[tool.flake8]
+max-line-length = 100
+exclude = [".git", "__pycache__", "venv"]

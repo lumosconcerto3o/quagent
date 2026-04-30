@@ -1,0 +1,12 @@
+{
+  "symbol": "TSLA",
+  "action": "BUY",
+  "quantity": 25,
+  "order_type": "MARKET",
+  "strategy_name": "ai_agent_signal",
+  "metadata": {
+    "agent_id": "strategy_v1",
+    "confidence": 0.75,
+    "reason": "Signal from deterministic strategy rules"
+  }
+}

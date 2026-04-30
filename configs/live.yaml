@@ -1,0 +1,39 @@
+# Live Trading Configuration
+# WARNING: Use with caution - enables real money trading
+trading_mode: live
+allow_live: false  # Must be explicitly changed to true to enable live trading
+
+# IBKR Connection Settings
+ibkr:
+  host: 127.0.0.1
+  port: 7496  # Different port for live trading
+  client_id: 1
+  read_only_api: true   # must remain true until order submission is fully implemented
+
+# Account Settings
+account:
+  # Account ID will be retrieved from IBKR connection
+  max_position_size: 5000  # More conservative for live trading
+  buying_power_limit: 25000
+  max_order_notional_usd: 100  # Very conservative cap for live trading
+  allowed_asset_classes:
+    - STK
+  require_stop_loss: true
+  enable_safeguards: true
+
+# Logging
+logging:
+  level: INFO
+  file: logs/trading.log
+
+# Database
+database:
+  url: sqlite:///data/trading_log.sqlite
+
+# Trading Parameters
+trading:
+  strategy: live_strategy
+  check_interval: 30  # seconds
+  risk_management:
+    max_loss_per_trade: 500
+    max_daily_loss: 2000

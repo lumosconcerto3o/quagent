@@ -1,0 +1,12 @@
+{
+  "symbol": "MSFT",
+  "action": "SELL",
+  "quantity": 50,
+  "limit_price": 350.00,
+  "order_type": "LIMIT",
+  "strategy_name": "manual_signal",
+  "metadata": {
+    "reason": "Example short/close position",
+    "risk_rating": "medium"
+  }
+}

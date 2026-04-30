@@ -1,0 +1,39 @@
+# Paper Trading Configuration
+trading_mode: paper
+allow_live: false
+
+# IBKR Connection Settings
+ibkr:
+  host: 127.0.0.1
+  port: 7497
+  client_id: 1
+  read_only_api: true   # keeps TWS happy; skip openTrades/reqOpenOrders calls
+
+# Account Settings
+account:
+  # Account ID will be retrieved from IBKR connection
+  max_position_size: 10000
+  buying_power_limit: 50000
+  max_order_notional_usd: 5000
+  allowed_asset_classes:
+    - STK
+  require_stop_loss: false
+
+# Logging
+logging:
+  level: INFO
+  file: logs/trading.log
+
+# Database
+database:
+  url: sqlite:///data/trading_log.sqlite
+
+# Trading Parameters
+trading:
+  strategy: paper_strategy
+  check_interval: 60  # seconds
+
+# Market Data
+market_data:
+  data_type: delayed        # free 15-20 min delayed; no subscription needed (IBKR type 3)
+  stale_seconds: 300
