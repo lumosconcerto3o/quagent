@@ -200,8 +200,10 @@ async def run_dry_run(
         "risk_passed": True,
         "risk_warnings": risk_result.warnings,
         "order_id": order.order_id,
-        "order_status": order.status.value,
-        "broker_order_id": order.broker_order_id,
+        "order_status": order.status.value,   # local OMS state; not a broker confirmation
+        "broker_submission": False,            # no broker call was made
+        "broker_order_id": order.broker_order_id,  # always None in dry-run
+        "execution_mode": "DRY_RUN",
         "dry_run_enforced": engine.dry_run,
         "execution_success": success,
     }
@@ -284,12 +286,12 @@ def _print_report(result: dict) -> None:
     else:
         print(f"    (no warnings)")
     print(_LINE)
-    print(f"  OMS Order ID     : {result.get('order_id', 'N/A')}")
-    print(f"  Order Status     : {result.get('order_status', 'N/A')}")
-    bid = result.get("broker_order_id")
-    print(f"  Broker Order ID  : {bid}  <-- None confirms no broker submission")
-    print(f"  dry_run          : {result.get('dry_run_enforced')}")
-    print(f"  Submitted to broker : NO (dry-run mode; ib.placeOrder never called)")
+    print(f"  OMS Order ID          : {result.get('order_id', 'N/A')}")
+    print(f"  Local OMS Status      : {result.get('order_status', 'N/A')}")
+    print(f"  Broker Submission     : NO")
+    print(f"  Broker Order ID       : {result.get('broker_order_id')}")
+    print(f"  Execution Mode        : {result.get('execution_mode', 'UNKNOWN')}")
+    print(f"  Safety Confirmation   : No broker order was submitted")
     print(_SEP)
 
 

@@ -38,3 +38,6 @@ Thumbs.db
 # IBKR / local runtime artifacts
 *.sqlite-shm
 *.sqlite-wal
+
+# Local tooling
+.trunk/
