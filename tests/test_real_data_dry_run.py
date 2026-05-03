@@ -221,9 +221,59 @@ async def test_run_dry_run_success_fields_present():
     for key in (
         "symbol", "quote", "summary", "signal",
         "risk_passed", "order_id", "order_status",
-        "broker_order_id", "dry_run_enforced", "execution_success",
+        "broker_submission", "broker_order_id",
+        "execution_mode", "dry_run_enforced", "execution_success",
     ):
         assert key in result, f"Missing key: {key}"
+
+
+# ------------------------------------------------------------------ #
+# Semantic clarity: local OMS status vs broker status                 #
+# ------------------------------------------------------------------ #
+
+async def test_run_dry_run_execution_mode_is_dry_run():
+    """result['execution_mode'] must be 'DRY_RUN' — not 'LIVE' or absent."""
+    result = await run_dry_run(
+        _paper_config(),
+        _make_client(),
+        _make_account_mgr(),
+        _make_market_mgr(),
+        "SPY",
+    )
+
+    assert result["execution_mode"] == "DRY_RUN"
+
+
+async def test_run_dry_run_broker_submission_is_false():
+    """result['broker_submission'] must be False in dry-run mode."""
+    result = await run_dry_run(
+        _paper_config(),
+        _make_client(),
+        _make_account_mgr(),
+        _make_market_mgr(),
+        "SPY",
+    )
+
+    assert result["broker_submission"] is False
+
+
+async def test_run_dry_run_local_oms_status_is_submitted():
+    """
+    The local OMS status is 'SUBMITTED' — this records the simulated
+    execution in the local state machine only, not a broker confirmation.
+    broker_submission=False and broker_order_id=None confirm no real submission.
+    """
+    result = await run_dry_run(
+        _paper_config(),
+        _make_client(),
+        _make_account_mgr(),
+        _make_market_mgr(),
+        "SPY",
+    )
+
+    assert result["order_status"] == "SUBMITTED"   # local OMS tracking state
+    assert result["broker_submission"] is False    # no broker call was made
+    assert result["broker_order_id"] is None       # no broker order ID assigned
 
     assert result["symbol"] == "SPY"
     assert result["risk_passed"] is True
