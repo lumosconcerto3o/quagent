@@ -41,3 +41,6 @@ Thumbs.db
 
 # Local tooling
 .trunk/
+
+# Dry-run reports
+data/dry_run_reports/

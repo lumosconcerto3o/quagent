@@ -30,6 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import argparse
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from app.config import load_config, QuAgentConfig
@@ -210,6 +211,95 @@ async def run_dry_run(
 
 
 # ------------------------------------------------------------------ #
+# Audit report writer                                                  #
+# ------------------------------------------------------------------ #
+
+def _write_audit_report(
+    result: dict,
+    report_dir: Path,
+    config_path: str,
+    symbol: str,
+) -> Path:
+    """
+    Write a JSON audit record for this dry-run run.
+
+    broker_submission and broker_order_id are ALWAYS written as false/null
+    regardless of what the result dict contains — these are safety invariants,
+    not derived from runtime state.
+
+    Returns the path of the written file.
+    Never raises; logs a warning on write error instead.
+    """
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(tz=timezone.utc)
+    ts_file = ts.strftime("%Y%m%dT%H%M%SZ")
+    report_path = report_dir / f"dry_run_{ts_file}_{symbol}.json"
+
+    summary = result.get("summary") or {}
+    quote = result.get("quote") or {}
+    sig = result.get("signal")
+
+    sig_dict = None
+    if sig is not None:
+        sig_dict = {
+            "action": sig.action.value,
+            "quantity": sig.quantity,
+            "order_type": sig.order_type.value,
+            "limit_price": sig.limit_price,
+            "asset_class": sig.asset_class,
+            "strategy_name": sig.strategy_name,
+        }
+
+    quote_dict = None
+    if quote:
+        quote_dict = {
+            "quote_quality": quote.get("quote_quality"),
+            "data_type": quote.get("data_type"),
+            "price": quote.get("price"),
+            "bid": quote.get("bid"),
+            "ask": quote.get("ask"),
+            "last": quote.get("last"),
+            "close": quote.get("close"),
+            "is_stale": quote.get("is_stale"),
+            "timestamp": quote.get("timestamp"),
+        }
+
+    report = {
+        "timestamp_utc": ts.isoformat(),
+        "config_path": config_path,
+        "symbol": result.get("symbol", symbol),
+        "account_id": summary.get("account_id"),
+        "net_liquidation": summary.get("NetLiquidation"),
+        "available_funds": summary.get("AvailableFunds"),
+        "quote": quote_dict,
+        "signal": sig_dict,
+        "risk_passed": result.get("risk_passed"),
+        "risk_failures": result.get("risk_failures"),
+        "risk_warnings": result.get("risk_warnings"),
+        "oms_order_id": result.get("order_id"),
+        "local_oms_status": result.get("order_status"),
+        # Safety invariants — always false/null in dry-run, never derived from result
+        "broker_submission": False,
+        "broker_order_id": None,
+        "execution_mode": "DRY_RUN",
+        "dry_run_enforced": True,
+        "final_status": result.get("status"),
+        "reason": result.get("reason"),
+        "safety_confirmation": "No broker order was submitted",
+    }
+
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, default=str)
+        logger.info(f"Audit report written: {report_path}")
+    except OSError as exc:
+        logger.warning(f"Could not write audit report to {report_path}: {exc}")
+
+    return report_path
+
+
+# ------------------------------------------------------------------ #
 # Report formatter                                                     #
 # ------------------------------------------------------------------ #
 
@@ -317,6 +407,13 @@ async def main() -> None:
         metavar="SYMBOL",
         help="Symbol to test the pipeline against (default: SPY)",
     )
+    parser.add_argument(
+        "--report-dir",
+        default="data/dry_run_reports",
+        metavar="DIR",
+        dest="report_dir",
+        help="Directory for JSON audit reports (default: data/dry_run_reports)",
+    )
     args = parser.parse_args()
 
     # ── Load config ────────────────────────────────────────────────────
@@ -325,6 +422,8 @@ async def main() -> None:
     except Exception as exc:
         print(f"[ERROR] Failed to load config '{args.config}': {exc}")
         return
+
+    report_dir = Path(args.report_dir)
 
     # ── Build components ───────────────────────────────────────────────
     read_only = config.ibkr.read_only_api
@@ -349,12 +448,21 @@ async def main() -> None:
         print("[ERROR] Connection failed. Is TWS / IB Gateway running?")
         return
 
+    result = None
     try:
         result = await run_dry_run(config, client, account_mgr, market_mgr, symbol)
         _print_report(result)
     except (ValueError, RuntimeError) as exc:
         print(f"\n[ABORT] {exc}")
+        result = {
+            "status": "aborted",
+            "reason": "safety_guard_triggered",
+            "symbol": symbol,
+        }
     finally:
+        if result is not None:
+            report_path = _write_audit_report(result, report_dir, args.config, symbol)
+            print(f"\n  Audit report: {report_path}")
         await client.disconnect()
 
 

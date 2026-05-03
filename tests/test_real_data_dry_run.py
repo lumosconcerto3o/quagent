@@ -3,11 +3,13 @@ Tests for the real_data_dry_run pipeline.
 All tests are offline — no real IBKR connection required.
 """
 
+import json
 import pytest
+from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 
 from app.config import QuAgentConfig
-from scripts.real_data_dry_run import run_dry_run
+from scripts.real_data_dry_run import run_dry_run, _write_audit_report
 
 
 # ------------------------------------------------------------------ #
@@ -278,6 +280,134 @@ async def test_run_dry_run_local_oms_status_is_submitted():
     assert result["symbol"] == "SPY"
     assert result["risk_passed"] is True
     assert result["execution_success"] is True
+
+
+# ------------------------------------------------------------------ #
+# Audit report — file creation                                        #
+# ------------------------------------------------------------------ #
+
+async def test_audit_report_created_on_success(tmp_path):
+    """A JSON audit report file must be created for a successful dry-run."""
+    result = await run_dry_run(
+        _paper_config(), _make_client(), _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    report_path = _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+
+    assert report_path.exists()
+    assert report_path.suffix == ".json"
+    assert "SPY" in report_path.name
+
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["final_status"] == "success"
+
+
+async def test_audit_report_created_on_incomplete_quote_abort(tmp_path):
+    """A JSON report must be written even when the pipeline aborts (incomplete quote)."""
+    result = await run_dry_run(
+        _paper_config(),
+        _make_client(),
+        _make_account_mgr(),
+        _make_market_mgr(quote_quality="incomplete", price=0.0, is_stale=True),
+        "SPY",
+    )
+    report_path = _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+
+    assert report_path.exists()
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["final_status"] == "aborted"
+    assert data["reason"] == "incomplete_quote"
+
+
+async def test_audit_report_created_on_risk_failure(tmp_path):
+    """A JSON report must be written even when risk checks fail."""
+    from app.config import AccountConfig
+
+    config = QuAgentConfig(
+        trading_mode="paper",
+        allow_live=False,
+        account=AccountConfig(max_order_notional_usd=1.0),
+    )
+    result = await run_dry_run(
+        config, _make_client(), _make_account_mgr(), _make_market_mgr(price=555.0), "SPY"
+    )
+    report_path = _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+
+    assert report_path.exists()
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["final_status"] == "risk_failed"
+    assert isinstance(data["risk_failures"], list)
+    assert len(data["risk_failures"]) > 0
+
+
+# ------------------------------------------------------------------ #
+# Audit report — safety invariant fields                              #
+# ------------------------------------------------------------------ #
+
+async def test_audit_report_broker_submission_is_false(tmp_path):
+    """broker_submission must be false in every audit report."""
+    result = await run_dry_run(
+        _paper_config(), _make_client(), _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    data = json.loads(
+        _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+        .read_text(encoding="utf-8")
+    )
+    assert data["broker_submission"] is False
+
+
+async def test_audit_report_broker_order_id_is_null(tmp_path):
+    """broker_order_id must be null in every audit report."""
+    result = await run_dry_run(
+        _paper_config(), _make_client(), _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    data = json.loads(
+        _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+        .read_text(encoding="utf-8")
+    )
+    assert data["broker_order_id"] is None
+
+
+async def test_audit_report_execution_mode_is_dry_run(tmp_path):
+    """execution_mode must be 'DRY_RUN' in every audit report."""
+    result = await run_dry_run(
+        _paper_config(), _make_client(), _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    data = json.loads(
+        _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+        .read_text(encoding="utf-8")
+    )
+    assert data["execution_mode"] == "DRY_RUN"
+    assert data["safety_confirmation"] == "No broker order was submitted"
+
+
+async def test_audit_report_directory_auto_created(tmp_path):
+    """_write_audit_report must create the report directory if it does not exist."""
+    nested_dir = tmp_path / "new" / "subdir" / "reports"
+    assert not nested_dir.exists()
+
+    result = await run_dry_run(
+        _paper_config(), _make_client(), _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    _write_audit_report(result, nested_dir, "configs/paper.yaml", "SPY")
+
+    assert nested_dir.exists()
+    assert len(list(nested_dir.glob("*.json"))) == 1
+
+
+async def test_audit_report_write_does_not_call_broker_submit_order(tmp_path):
+    """
+    Writing the audit report must not call submit_order on the client.
+    submit_order is called exactly once total: the pipeline guard check.
+    """
+    client = _make_client()
+    result = await run_dry_run(
+        _paper_config(), client, _make_account_mgr(), _make_market_mgr(), "SPY"
+    )
+    calls_before_report = client.submit_order.call_count
+
+    _write_audit_report(result, tmp_path, "configs/paper.yaml", "SPY")
+
+    assert client.submit_order.call_count == calls_before_report
 
 
 if __name__ == "__main__":
